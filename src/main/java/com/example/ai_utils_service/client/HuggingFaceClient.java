@@ -23,7 +23,7 @@ public class HuggingFaceClient implements LlmClient{
 
 
     @Override
-    public String generate(String prompt) {
+    public String generate(String prompt, boolean cleanResponse) {
         Map<String, Object> requestBody = Map.of("model", modelName, "messages", List.of(Map.of("role", "user", "content", prompt)));
 
         HttpHeaders headers = new HttpHeaders();
@@ -32,11 +32,11 @@ public class HuggingFaceClient implements LlmClient{
 
         HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
 
-        return getResponse(requestEntity);
+        return getResponse(requestEntity, cleanResponse);
     }
 
     @Override
-    public String generateWithInstruction(String prompt, String instruction) {
+    public String generateWithInstruction(String prompt, String instruction, boolean cleanResponse) {
         Map<String, Object> requestBody = Map.of("model", modelName, "messages", List.of(Map.of("role", "system", "content", instruction),
                 Map.of("role", "user", "content", prompt)));
 
@@ -46,11 +46,11 @@ public class HuggingFaceClient implements LlmClient{
 
         HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
 
-        return getResponse(requestEntity);
+        return getResponse(requestEntity, cleanResponse);
     }
 
     @Override
-    public String generateWithHistory(List<ChatMessage> messages) {
+    public String generateWithHistory(List<ChatMessage> messages, boolean cleanResponse) {
         List<Map<String, String>> formattedMessages = messages.stream()
                 .map(msg -> Map.of("role", msg.getRole(), "content", msg.getContent()))
                 .toList();
@@ -61,10 +61,30 @@ public class HuggingFaceClient implements LlmClient{
         headers.setBearerAuth(apiKey);
 
         HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
-        return getResponse(requestEntity);
+        return getResponse(requestEntity, cleanResponse);
     }
 
-    private String getResponse(HttpEntity<Map<String, Object>> requestEntity) {
+    @Override
+    public <T> T generateStructured(String prompt, String instruction, Class<T> responseType, boolean cleanResponse) {
+        Map<String, Object> requestBody = Map.of("model", modelName, "messages", List.of(Map.of("role", "system", "content", instruction),
+                Map.of("role", "user", "content", prompt)));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(apiKey);
+
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
+
+        String response = getResponse(requestEntity, cleanResponse);
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            return objectMapper.readValue(response, responseType);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse structured response from HuggingFace API", e);
+        }
+    }
+
+    private String getResponse(HttpEntity<Map<String, Object>> requestEntity, boolean cleanResponse) {
         ResponseEntity<String> responseEntity = restTemplate.postForEntity(apiUrl, requestEntity, String.class);
 
         if (responseEntity.getBody() == null || responseEntity.getBody().isEmpty()) {
@@ -93,6 +113,21 @@ public class HuggingFaceClient implements LlmClient{
         Map<String, Object> msgMap = (Map<String, Object>) msg;
 
         Object text = msgMap.get("content");
-        return text != null ? text.toString() : "";
+        if(cleanResponse){
+            text = cleanResponse(text.toString());
+        }
+        return text.toString();
+    }
+
+    private Object cleanResponse(String text) {
+        // Remove code block formatting if present
+        //remove **, \n, \t, and other markdown formatting
+        if(text == null) return "";
+        text = text.replaceAll("\\*\\*", "")
+        .replaceAll("\\n", " ")
+        .replaceAll("\\t", " ")
+        .replaceAll("`", "")
+        .replaceAll("json", "");
+        return text.trim();
     }
 }
