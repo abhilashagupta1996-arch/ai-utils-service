@@ -17,7 +17,7 @@ public class ConversationService {
         this.llmClient = llmClient;
     }
 
-    public String chat(String conversationId, String userMessage) {
+    public String chat(String conversationId, String userMessage, boolean cleanResponse) {
 
         List<ChatMessage> history = conversationStore.getConversation(conversationId);
         ChatMessage userChatMessage = new ChatMessage("user", userMessage);
@@ -27,7 +27,7 @@ public class ConversationService {
         history.add(userChatMessage);
 
         System.out.println("Conversation history:" + history);
-        String reply = llmClient.generateWithHistory(history);
+        String reply = llmClient.generateWithHistory(history, cleanResponse);
         ChatMessage assistantChatMessage = new ChatMessage("assistant", reply);
         history.add(assistantChatMessage);
         conversationStore.setConversation(conversationId, history);
