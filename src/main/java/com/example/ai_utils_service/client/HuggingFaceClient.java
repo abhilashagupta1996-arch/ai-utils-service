@@ -84,6 +84,21 @@ public class HuggingFaceClient implements LlmClient{
         }
     }
 
+    @Override
+    public String generateWithHistory(List<ChatMessage> messages, boolean cleanResponse, String modelName) {
+        List<Map<String, String>> formattedMessages = messages.stream()
+                .map(msg -> Map.of("role", msg.getRole(), "content", msg.getContent()))
+                .toList();
+        Map<String, Object> requestBody = Map.of("model", modelName, "messages", formattedMessages);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(apiKey);
+
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestBody, headers);
+        return getResponse(requestEntity, cleanResponse);
+    }
+
     private String getResponse(HttpEntity<Map<String, Object>> requestEntity, boolean cleanResponse) {
         ResponseEntity<String> responseEntity = restTemplate.postForEntity(apiUrl, requestEntity, String.class);
 
@@ -107,7 +122,7 @@ public class HuggingFaceClient implements LlmClient{
 
         Map<String, Object> firstChoice = choices.get(0);
         Object msg = firstChoice.get("message");
-        if (msg == null || !(msg instanceof Map)) {
+        if (!(msg instanceof Map)) {
             throw new RuntimeException("Invalid message format in HuggingFace API response");
         }
         Map<String, Object> msgMap = (Map<String, Object>) msg;
@@ -123,11 +138,11 @@ public class HuggingFaceClient implements LlmClient{
         // Remove code block formatting if present
         //remove **, \n, \t, and other markdown formatting
         if(text == null) return "";
-        text = text.replaceAll("\\*\\*", "")
-        .replaceAll("\\n", " ")
-        .replaceAll("\\t", " ")
-        .replaceAll("`", "")
-        .replaceAll("json", "");
+        text = text.replace("\\*\\*", "")
+        .replace("\\n", " ")
+        .replace("\\t", " ")
+        .replace("`", "")
+        .replace("json", "");
         return text.trim();
     }
 }
